@@ -62,7 +62,11 @@
 
 -- COMMAND ----------
 
--- TODO
+DROP TABLE IF EXISTS outdoorProducts;
+CREATE TABLE outdoorProducts USING csv OPTIONS (
+  path = '/mnt/training/online_retail/data-001/data.csv',
+  header = 'true'
+);
 
 -- COMMAND ----------
 
@@ -80,7 +84,21 @@
 
 -- COMMAND ----------
 
--- TODO
+-- Get sample data
+SELECT
+  *
+FROM
+  outdoorProducts
+LIMIT
+  5;
+
+-- COMMAND ----------
+
+SELECT
+  COUNT(Quantity) AS quantity
+FROM outdoorProducts
+WHERE
+  Quantity < 0;
 
 -- COMMAND ----------
 
@@ -97,7 +115,17 @@
 
 -- COMMAND ----------
 
--- TODO
+CREATE TEMP VIEW sales AS
+SELECT
+  StockCode stockCode,
+  Quantity quantity,
+  UnitPrice unitPrice,
+  Quantity * UnitPrice AS totalAmount,
+  Country countryName
+FROM
+  outdoorProducts
+WHERE
+  Quantity > 0;
 
 -- COMMAND ----------
 
@@ -113,7 +141,12 @@
 
 -- COMMAND ----------
 
--- TODO
+SELECT
+  *
+FROM
+  sales
+ORDER BY
+  totalAmount DESC;
 
 -- COMMAND ----------
 
@@ -127,7 +160,10 @@
 
 -- COMMAND ----------
 
--- TODO
+SELECT
+  DISTINCT countryName
+FROM
+  sales;
 
 -- COMMAND ----------
 
@@ -143,7 +179,40 @@
 
 -- COMMAND ----------
 
--- TODO
+CREATE TEMP VIEW salesQuants AS
+SELECT
+  countryName,
+  SUM(quantity) AS totalQuantity
+FROM
+  sales
+GROUP BY
+  countryName
+ORDER BY
+  totalQuantity DESC;
+
+-- COMMAND ----------
+
+-- Get the fourth
+WITH country_total_quantity AS (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (
+      ORDER BY
+        totalQuantity DESC
+    ) AS reportingRow
+  FROM
+    salesQuants
+  WHERE
+    totalQuantity IS NOT NULL
+  ORDER BY
+    totalQuantity DESC
+)
+SELECT
+  *
+FROM
+  country_total_quantity
+WHERE
+  reportingRow = 4;
 
 -- COMMAND ----------
 
@@ -158,7 +227,11 @@
 
 -- COMMAND ----------
 
--- TODO
+DROP TABLE IF EXISTS countryCodes;
+CREATE TABLE countryCodes USING parquet OPTIONS (
+  path = '/mnt/training/countries/ISOCountryCodes/ISOCountryLookup.parquet',
+  header = 'true'
+);
 
 -- COMMAND ----------
 
@@ -172,7 +245,7 @@
 
 -- COMMAND ----------
 
--- TODO
+DESCRIBE countryCodes;
 
 -- COMMAND ----------
 
@@ -188,7 +261,12 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+  totalQuantity,
+  alpha3Code
+FROM
+  salesQuants sq
+  JOIN countryCodes cc ON sq.countryName = cc.EnglishShortName;
 
 -- COMMAND ----------
 
@@ -291,11 +369,12 @@
 
 -- COMMAND ----------
 
--- TODO
-
--- COMMAND ----------
-
--- TODO
+SELECT
+  EnglishShortName,
+  countryName
+FROM
+  countryCodes cc FULL
+  JOIN salesQuants sq ON cc.EnglishShortName = sq.countryName;
 
 -- COMMAND ----------
 
