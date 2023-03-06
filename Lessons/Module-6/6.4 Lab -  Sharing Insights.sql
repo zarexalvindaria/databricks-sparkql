@@ -43,8 +43,10 @@
 
 -- COMMAND ----------
 
---TODO
-
+CREATE TABLE energy USING json options (
+  path = '/mnt/training/iot-devices/data-centers/energy.json',
+  header = 'true'
+);
 
 -- COMMAND ----------
 
@@ -59,6 +61,7 @@
 -- COMMAND ----------
 
 --TODO
+SELECT * FROM energy tablesample(10 percent);
 
 -- COMMAND ----------
 
@@ -74,8 +77,18 @@
 
 -- COMMAND ----------
 
---TODO
-
+DROP TABLE IF EXISTS DCDevices;
+CREATE TEMP VIEW DCDevices AS
+SELECT
+  battery_level AS batteryLevel,
+  co2_level AS co2Level,
+  device_id AS deviceId,
+  device_type AS deviceType,
+  signal,
+  temps,
+  to_timestamp(timestamp) AS timestamp
+FROM
+  energy;
 
 -- COMMAND ----------
 
@@ -92,7 +105,17 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+  batteryLevel,
+  deviceId,
+  EXISTS(batteryLevel, b -> b < 0) AS needService
+FROM
+  DCDevices
+WHERE
+  EXISTS(batteryLevel, b -> b < 0)
+ORDER BY
+  deviceId,
+  batteryLevel;
 
 -- COMMAND ----------
 
@@ -113,7 +136,18 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+  deviceId,
+  deviceType,
+  FILTER(cO2Level, c -> c > 1400) highCO2,
+  timestamp AS time
+FROM
+  DCDevices
+WHERE 
+  EXISTS(cO2Level, c -> c > 1400)
+ORDER BY
+  deviceId,
+  highCO2;
 
 -- COMMAND ----------
 
@@ -132,7 +166,16 @@
 
 -- COMMAND ----------
 
---TODO
+DROP TABLE IF EXISTS p_deviceId;
+CREATE TABLE IF NOT EXISTS p_deviceId PARTITIONED BY (deviceId) AS
+SELECT
+  *
+FROM
+  DCDevices;
+SELECT
+  *
+FROM
+  p_deviceId;
 
 -- COMMAND ----------
 
@@ -141,7 +184,13 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+--   deviceId,
+  deviceType,
+  REDUCE(temps, CAST(0 AS BIGINT), (t, acc) -> t + acc, acc ->(acc div size(temps))) AS avgTemps
+FROM
+  DCDevices
+GROUP BY 1,2;
 
 -- COMMAND ----------
 
@@ -150,7 +199,11 @@
 
 -- COMMAND ----------
 
---TODO
+CREATE WIDGET DROPDOWN selectedDeviceType DEFAULT "sensor-inest" CHOICES
+SELECT
+  DISTINCT deviceType
+FROM
+  DCDevices;
 
 -- COMMAND ----------
 
@@ -159,8 +212,13 @@
 
 -- COMMAND ----------
 
---TODO
-
+SELECT 
+  deviceType,
+  ROUND(AVG(REDUCE(temps, CAST(0 AS BIGINT), (t, acc) -> t + acc, acc ->(acc div size(temps)))), 4) AS avgTemp,
+  ROUND(STD(REDUCE(temps, CAST(0 AS BIGINT), (t, acc) -> t + acc, acc ->(acc div size(temps)))), 2) AS stdTemp
+FROM DCDevices
+WHERE deviceType = getArgument("selectedDeviceType")
+GROUP BY deviceType
 
 -- COMMAND ----------
 
