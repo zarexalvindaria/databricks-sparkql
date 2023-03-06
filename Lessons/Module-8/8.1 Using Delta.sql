@@ -173,7 +173,8 @@ SELECT COUNT(*) FROM health_tracker_silver
 
 -- COMMAND ----------
 
-SELECT p_device_id, COUNT(*) FROM health_tracker_silver GROUP BY p_device_id
+SELECT deviceId, COUNT(*) FROM health_tracker_silver GROUP BY deviceId;
+-- SELECT p_device_id, COUNT(*) FROM health_tracker_silver GROUP BY p_device_id
 
 -- COMMAND ----------
 

@@ -33,7 +33,12 @@
 
 -- COMMAND ----------
 
--- TODO
+DROP TABLE IF EXISTS health_tracker_data_2020;
+
+CREATE TABLE health_tracker_data_2020 USING json OPTIONS (
+  path 'dbfs:/mnt/training/healthcare/tracker/raw.json/',
+  inferSchema 'true'
+);
 
 -- COMMAND ----------
 
@@ -48,7 +53,12 @@
 
 -- COMMAND ----------
 
--- TODO
+SELECT
+  *
+FROM
+  health_tracker_data_2020
+LIMIT
+  5;
 
 -- COMMAND ----------
 
@@ -63,7 +73,7 @@
 
 -- COMMAND ----------
 
--- TODO
+SELECT COUNT(*) FROM health_tracker_data_2020;
 
 -- COMMAND ----------
 
@@ -80,7 +90,14 @@
 
 -- COMMAND ----------
 
--- TODO
+CREATE TABLE silver_delta USING DELTA PARTITIONED BY (deviceId) AS
+SELECT
+  value.device_id AS deviceId,
+  value.heartrate AS heartrate,
+  value.name AS name,
+  CAST(FROM_UNIXTIME(value.time) AS DATE) AS time
+FROM
+  health_tracker_data_2020;
 
 -- COMMAND ----------
 
@@ -93,7 +110,17 @@
 
 -- COMMAND ----------
 
--- TODO
+DROP TABLE IF EXISTS silver_delta;
+
+CREATE OR REPLACE TABLE silver_delta USING DELTA PARTITIONED BY (deviceId) LOCATION "/health_tracker/silver" AS (
+  SELECT
+    value.device_id AS deviceId,
+    value.heartrate AS heartrate,
+    value.name AS name,
+    CAST(FROM_UNIXTIME(value.time) AS DATE) AS time
+  FROM
+    health_tracker_data_2020
+);
 
 -- COMMAND ----------
 
@@ -109,7 +136,13 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+  deviceId,
+  COUNT(*)
+FROM
+  silver_delta
+GROUP BY
+  1;
 
 -- COMMAND ----------
 
@@ -126,7 +159,13 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+  COUNT(time) AS time_count,
+  deviceId,
+  time
+FROM
+  silver_delta
+  GROUP BY 2,3;
 
 -- COMMAND ----------
 
@@ -139,7 +178,18 @@
 
 -- COMMAND ----------
 
---TODO
+CREATE VIEW IF NOT EXISTS broken_readings AS
+SELECT
+  *
+FROM
+  silver_delta
+WHERE
+  heartrate < 0;
+SELECT
+  heartrate,
+  date_format(time, "E") AS day_of_week
+FROM
+  broken_readings;
 
 -- COMMAND ----------
 
@@ -156,7 +206,56 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+  CONCAT(deviceId, "-", name, "-", time),
+  COUNT(*) AS cnt_p_key
+FROM
+  silver_delta
+GROUP BY 1;
+
+-- COMMAND ----------
+
+-- TODO: Update this query
+
+CREATE
+OR REPLACE TEMP VIEW temp_fix_readings AS
+SELECT
+  deviceId,
+  IF(heartrate < 0, AVG(heartrate), heartrate) AS heartrate,
+  name,
+  time
+FROM
+  silver_delta
+WHERE
+GROUP BY
+  1,3,4,heartrate;
+
+
+
+CREATE OR REPLACE TEMP VIEW fix_readings AS
+WITH temp_table AS (
+    SELECT
+      *,
+      CONCAT(deviceId, "-", name, "-", time) AS p_key
+    FROM
+      temp_fix_readings
+  )
+SELECT
+  deviceId,
+  heartrate,
+  name,
+  time
+FROM
+  temp_table
+WHERE
+  p_key IN (
+    SELECT
+      CONCAT(deviceId, "-", name, "-", time) as p_key
+    FROM
+      broken_readings
+  );
+  
+SELECT COUNT(*) FROM fix_readings;
 
 -- COMMAND ----------
 
@@ -172,7 +271,16 @@
 
 -- COMMAND ----------
 
---TODO
+DROP TABLE IF EXISTS late_data;
+
+CREATE TABLE late_data USING json OPTIONS (
+  path "dbfs:/mnt/training/healthcare/tracker/raw-late.json",
+  inferSchema true
+);
+SELECT
+  COUNT(*) AS count_late_data
+FROM
+  late_data;
 
 -- COMMAND ----------
 
@@ -186,7 +294,19 @@
 
 -- COMMAND ----------
 
---TODO
+DROP VIEW late_data_delta;
+
+CREATE OR REPLACE TEMP VIEW late_data_delta AS (
+  SELECT
+    value.device_id AS deviceId,
+    value.heartrate AS heartrate,
+    value.name AS name,
+    CAST(FROM_UNIXTIME(value.time) AS DATE) AS time
+  FROM
+    late_data
+);
+
+SELECT COUNT(*) FROM late_data_delta;
 
 -- COMMAND ----------
 
@@ -202,7 +322,21 @@
 
 -- COMMAND ----------
 
---TODO
+CREATE TEMP VIEW union_silver_data_view AS
+SELECT
+  *
+FROM
+  late_data_delta
+UNION
+SELECT
+  *
+FROM
+  fix_readings;
+  
+SELECT
+  COUNT(*) COUNT
+FROM
+  union_silver_data_view;
 
 -- COMMAND ----------
 
@@ -217,7 +351,7 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT COUNT(*) FROM silver_delta;
 
 -- COMMAND ----------
 
