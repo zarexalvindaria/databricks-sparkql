@@ -43,7 +43,11 @@
 
 -- COMMAND ----------
 
---TODO
+DROP TABLE IF EXISTS eventsRaw;
+CREATE TABLE eventsRaw USING parquet options (
+  path = '/mnt/training/ecommerce/events/events.parquet',
+  header = 'true'
+);
 
 -- COMMAND ----------
 
@@ -60,7 +64,7 @@
 
 -- COMMAND ----------
 
---TODO
+DESCRIBE eventsRaw;
 
 -- COMMAND ----------
 
@@ -74,7 +78,10 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+  *
+FROM
+  eventsRaw TABLESAMPLE (1 percent);
 
 -- COMMAND ----------
 
@@ -106,8 +113,35 @@
 
 -- COMMAND ----------
 
---TODO
+DROP TABLE IF EXISTS purchaseEvents;
+CREATE TABLE purchaseEvents AS WITH purchases AS (
+  SELECT
+    explode(items) AS purchases,
+    to_date(to_timestamp(event_previous_timestamp/1000000)) AS previousEventDate,
+    to_date(to_timestamp(event_timestamp/1000000)) AS eventDate,
+    geo.city city,
+    geo.state state,
+    user_id userId
+  FROM
+    eventsRaw
+  WHERE
+    ecommerce.purchase_revenue_in_usd IS NOT NULL
+)
+SELECT
+  SUM(purchases.quantity * purchases.price_in_usd) AS purchases,
+  previousEventDate,
+  eventDate,
+  city,
+  state,
+  userId
+FROM
+  purchases
+GROUP BY 2,3,4,5,6
+ORDER BY 1 DESC;
 
+-- COMMAND ----------
+
+SELECT * FROM purchaseEvents LIMIT 5;
 
 -- COMMAND ----------
 
@@ -122,7 +156,10 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+  COUNT(*)
+FROM
+  purchaseEvents;
 
 -- COMMAND ----------
 
@@ -136,7 +173,12 @@
 
 -- COMMAND ----------
 
---TODO
+SELECT
+  *
+FROM
+  purchaseEvents
+LIMIT
+  1;
 
 -- COMMAND ----------
 
@@ -158,23 +200,91 @@
 
 -- COMMAND ----------
 
---TODO
+--total purchases by date of week
+SELECT
+  SUM(purchases) AS totalPurchase,
+  date_format(eventDate, 'EEEE') AS dayOfWeek,
+  dayofweek(eventDate) AS dayOfWeekInt
+FROM
+  purchaseEvents
+GROUP BY
+  2,3
+ORDER BY
+  1;
 
 -- COMMAND ----------
 
---TODO
+--average purchases by date of purchase
+SELECT
+  ROUND(AVG(purchases), 2) AS avgPurchase,
+  eventDate
+FROM
+  purchaseEvents
+GROUP BY
+  2
+ORDER BY
+  1;
 
 -- COMMAND ----------
 
---TODO
+--total purchases by state
+SELECT
+  SUM(purchases) AS totalPurchase,
+  state
+FROM
+  purchaseEvents
+GROUP BY
+  2
+ORDER BY
+  1;
 
 -- COMMAND ----------
 
---TODO
+--top 10 users with highest purchases
+-- These customers could be given a special discount or offerings
+SELECT
+  SUM(purchases) AS totalPurchase,
+  userId
+FROM
+  purchaseEvents
+GROUP BY
+  2
+ORDER BY
+  1
+LIMIT
+  10;
 
 -- COMMAND ----------
 
---TODO
+--top 10 specific locations (city & state) with highest purchases
+SELECT
+  SUM(purchases) AS totalPurchase,
+  CONCAT(city, ", ", state) AS location
+FROM
+  purchaseEvents
+GROUP BY
+  2
+ORDER BY
+  1
+LIMIT
+  10;
+
+-- COMMAND ----------
+
+--Join your table with the data at the path listed below to get list of customers with confirmed email addresses
+-- path  = /mnt/training/ecommerce/users/users.parquet
+CREATE TABLE IF NOT EXISTS users USING parquet options (
+  path = '/mnt/training/ecommerce/users/users.parquet',
+  header = 'true'
+);
+SELECT
+  u.email,
+  p.city,
+  p.state,
+  p.purchases
+FROM
+  purchaseEvents p
+  JOIN users u ON p.userId = u.user_id;
 
 -- COMMAND ----------
 
